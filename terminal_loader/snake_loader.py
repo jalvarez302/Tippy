@@ -28,8 +28,10 @@ class SnakeLoader:
         self._setup_signal_handlers()
 
         height, width = self.renderer.get_dimensions()
+        self.play_height = max(1, height - 3)
+        self.play_width = max(1, width - 2)
         self.snake = SnakeAnimation(
-            height - 3, width - 2, initial_length=5
+            self.play_height, self.play_width, initial_length=5
         )
         self.word_index = 0
         self.frame_count = 0
@@ -83,16 +85,17 @@ class SnakeLoader:
         """Render the current frame."""
         self.renderer.clear()
 
-        height, width = self.renderer.get_dimensions()
+        height, _ = self.renderer.get_dimensions()
 
         self.renderer.draw_border(color_pair=2)
 
         for i, (y, x) in enumerate(self.snake.get_body()):
-            if 0 < y < height - 1 and 0 < x < width - 1:
-                if i == 0:
-                    self.renderer.draw_char(y, x, "●", color_pair=1)
-                else:
-                    self.renderer.draw_char(y, x, "○", color_pair=1)
+            screen_y = y + 1
+            screen_x = x + 1
+            if i == 0:
+                self.renderer.draw_char(screen_y, screen_x, "●", color_pair=1)
+            else:
+                self.renderer.draw_char(screen_y, screen_x, "○", color_pair=1)
 
         current_word = self.LOADING_WORDS[self.word_index]
         status_text = f"{current_word}..."

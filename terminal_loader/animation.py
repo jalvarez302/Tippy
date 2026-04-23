@@ -51,16 +51,11 @@ class SnakeAnimation:
         if len(self.body) > self.max_length:
             self.body.pop()
 
-    def set_direction(self, direction):
-        """Set the next direction if valid (avoid reversing into self)."""
-        if direction in self.DIRECTIONS:
-            opposite_dir = (-direction[0], -direction[1])
-            if opposite_dir != self.direction:
-                self.next_direction = direction
-
     def random_direction(self):
-        """Change to a random direction."""
-        self.next_direction = random.choice(self.DIRECTIONS)
+        """Pick a new random direction, avoiding immediate reversal."""
+        opposite = (-self.direction[0], -self.direction[1])
+        valid = [d for d in self.DIRECTIONS if d != opposite]
+        self.next_direction = random.choice(valid)
 
     def grow(self, amount=1):
         """Increase snake length."""

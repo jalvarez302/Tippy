@@ -2,6 +2,9 @@
 
 import curses
 import atexit
+import locale
+
+locale.setlocale(locale.LC_ALL, "")
 
 
 class TerminalRenderer:
@@ -66,22 +69,29 @@ class TerminalRenderer:
         self.stdscr.refresh()
 
     def draw_char(self, y, x, char, color_pair=0):
-        """Draw a single character at position (y, x)."""
-        if 0 <= y < self.height and 0 <= x < self.width:
+        """Draw a single character at position (y, x). Supports Unicode."""
+        if 0 <= y < self.height and 0 <= x < self.width - 1:
             try:
                 if color_pair > 0:
-                    self.stdscr.addch(y, x, ord(char), curses.color_pair(color_pair))
+                    self.stdscr.addstr(y, x, char, curses.color_pair(color_pair))
                 else:
-                    self.stdscr.addch(y, x, ord(char))
+                    self.stdscr.addstr(y, x, char)
             except curses.error:
                 pass
 
     def draw_string(self, y, x, text, color_pair=0):
         """Draw a string starting at position (y, x)."""
-        if 0 <= y < self.height:
-            for i, char in enumerate(text):
-                if x + i < self.width:
-                    self.draw_char(y, x + i, char, color_pair)
+        if 0 <= y < self.height and 0 <= x < self.width:
+            try:
+                max_len = self.width - x - 1
+                truncated = text[:max_len] if max_len > 0 else ""
+                if truncated:
+                    if color_pair > 0:
+                        self.stdscr.addstr(y, x, truncated, curses.color_pair(color_pair))
+                    else:
+                        self.stdscr.addstr(y, x, truncated)
+            except curses.error:
+                pass
 
     def draw_border(self, color_pair=0):
         """Draw a border around the screen."""
