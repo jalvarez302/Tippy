@@ -2,13 +2,12 @@
 
 import time
 import signal
-import random
 from .renderer import TerminalRenderer
 from .animation import SnakeAnimation
 
 
 class SnakeLoader:
-    """Displays an animated snake that eats letters to grow."""
+    """Displays an animated snake that eats letters from persistent words."""
 
     LOADING_WORDS = [
         "Loading",
@@ -37,8 +36,9 @@ class SnakeLoader:
         self.word_index = 0
         self.frame_count = 0
         self.letters_eaten = 0
-        self.food = {}  # {(y, x): letter_char}
-        self._spawn_food()
+        self.current_target = None
+        self.word_letters = {}  # {(y, x): (letter_char, is_eaten)}
+        self._setup_word()
 
     def _setup_signal_handlers(self):
         """Setup graceful exit on interrupt."""
@@ -52,35 +52,45 @@ class SnakeLoader:
         """Get the current word being eaten."""
         return self.LOADING_WORDS[self.word_index]
 
-    def _spawn_food(self):
-        """Spawn food letters for the current word."""
+    def _setup_word(self):
+        """Setup the current word with fixed screen positions."""
         word = self._get_current_word()
-        self.food.clear()
+        self.word_letters.clear()
         self.letters_eaten = 0
+        self.current_target = None
 
-        for letter in word:
-            while True:
-                y = random.randint(0, self.play_height - 1)
-                x = random.randint(0, self.play_width - 1)
-                if (y, x) not in self.food and (y, x) not in self.snake.get_body():
-                    self.food[(y, x)] = letter
-                    break
+        height, width = self.renderer.get_dimensions()
+        center_y = height // 2
+        center_x = (width - len(word)) // 2
+
+        for i, letter in enumerate(word):
+            play_y = center_y - 1
+            play_x = center_x + i - 1
+            if 0 <= play_y < self.play_height and 0 <= play_x < self.play_width:
+                self.word_letters[(play_y, play_x)] = [letter, False]
+
+        if self.word_letters:
+            self.current_target = list(self.word_letters.keys())[0]
 
     def _check_food_collision(self):
-        """Check if snake head ate food, return True if food eaten."""
+        """Check if snake head ate a letter."""
         head = self.snake.get_head()
-        if head in self.food:
-            self.snake.grow()
-            del self.food[head]
-            self.letters_eaten += 1
+        if head in self.word_letters:
+            letter_data = self.word_letters[head]
+            if not letter_data[1]:
+                letter_data[1] = True
+                self.snake.grow()
+                self.letters_eaten += 1
 
-            word = self._get_current_word()
-            if self.letters_eaten >= len(word):
-                self.word_index = (self.word_index + 1) % len(self.LOADING_WORDS)
-                self._spawn_food()
-
-            return True
-        return False
+                if self.letters_eaten >= len(self._get_current_word()):
+                    self.word_index = (self.word_index + 1) % len(self.LOADING_WORDS)
+                    self._setup_word()
+                else:
+                    self.current_target = None
+                    for pos, (_, eaten) in self.word_letters.items():
+                        if not eaten:
+                            self.current_target = pos
+                            break
 
     def start(self, duration=None):
         """Start the loading animation.
@@ -111,11 +121,8 @@ class SnakeLoader:
 
     def _update(self):
         """Update animation state."""
-        head_y, head_x = self.snake.get_head()
-
-        if self.food:
-            target = random.choice(list(self.food.keys()))
-            self.snake.chase_target(target[0], target[1])
+        if self.current_target:
+            self.snake.chase_target(self.current_target[0], self.current_target[1])
         else:
             self.snake.random_direction()
 
@@ -139,10 +146,11 @@ class SnakeLoader:
             else:
                 self.renderer.draw_char(screen_y, screen_x, "○", color_pair=1)
 
-        for (y, x), letter in self.food.items():
+        for (y, x), (letter, eaten) in self.word_letters.items():
             screen_y = y + 1
             screen_x = x + 1
-            self.renderer.draw_char(screen_y, screen_x, letter, color_pair=3)
+            if not eaten:
+                self.renderer.draw_char(screen_y, screen_x, letter, color_pair=3)
 
         current_word = self._get_current_word()
         progress = f"{self.letters_eaten}/{len(current_word)}"
