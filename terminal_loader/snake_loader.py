@@ -2,12 +2,13 @@
 
 import time
 import signal
+import random
 from .renderer import TerminalRenderer
 from .animation import SnakeAnimation
 
 
 class SnakeLoader:
-    """Displays an animated snake during loading operations."""
+    """Displays an animated snake that eats letters to grow."""
 
     LOADING_WORDS = [
         "Loading",
@@ -35,6 +36,9 @@ class SnakeLoader:
         )
         self.word_index = 0
         self.frame_count = 0
+        self.letters_eaten = 0
+        self.food = {}  # {(y, x): letter_char}
+        self._spawn_food()
 
     def _setup_signal_handlers(self):
         """Setup graceful exit on interrupt."""
@@ -43,6 +47,40 @@ class SnakeLoader:
     def _signal_handler(self, signum, frame):
         """Handle keyboard interrupt gracefully."""
         self.stop()
+
+    def _get_current_word(self):
+        """Get the current word being eaten."""
+        return self.LOADING_WORDS[self.word_index]
+
+    def _spawn_food(self):
+        """Spawn food letters for the current word."""
+        word = self._get_current_word()
+        self.food.clear()
+        self.letters_eaten = 0
+
+        for letter in word:
+            while True:
+                y = random.randint(0, self.play_height - 1)
+                x = random.randint(0, self.play_width - 1)
+                if (y, x) not in self.food and (y, x) not in self.snake.get_body():
+                    self.food[(y, x)] = letter
+                    break
+
+    def _check_food_collision(self):
+        """Check if snake head ate food, return True if food eaten."""
+        head = self.snake.get_head()
+        if head in self.food:
+            self.snake.grow()
+            del self.food[head]
+            self.letters_eaten += 1
+
+            word = self._get_current_word()
+            if self.letters_eaten >= len(word):
+                self.word_index = (self.word_index + 1) % len(self.LOADING_WORDS)
+                self._spawn_food()
+
+            return True
+        return False
 
     def start(self, duration=None):
         """Start the loading animation.
@@ -73,13 +111,17 @@ class SnakeLoader:
 
     def _update(self):
         """Update animation state."""
-        self.snake.random_direction()
+        head_y, head_x = self.snake.get_head()
+
+        if self.food:
+            target = random.choice(list(self.food.keys()))
+            self.snake.chase_target(target[0], target[1])
+        else:
+            self.snake.random_direction()
+
         self.snake.update()
         self.frame_count += 1
-
-        words_per_cycle = self.fps * 2
-        if self.frame_count % words_per_cycle == 0:
-            self.word_index = (self.word_index + 1) % len(self.LOADING_WORDS)
+        self._check_food_collision()
 
     def _render(self):
         """Render the current frame."""
@@ -97,8 +139,14 @@ class SnakeLoader:
             else:
                 self.renderer.draw_char(screen_y, screen_x, "○", color_pair=1)
 
-        current_word = self.LOADING_WORDS[self.word_index]
-        status_text = f"{current_word}..."
+        for (y, x), letter in self.food.items():
+            screen_y = y + 1
+            screen_x = x + 1
+            self.renderer.draw_char(screen_y, screen_x, letter, color_pair=3)
+
+        current_word = self._get_current_word()
+        progress = f"{self.letters_eaten}/{len(current_word)}"
+        status_text = f"{current_word} {progress}"
         self.renderer.center_text(status_text, y=height - 2)
 
         self.renderer.refresh()

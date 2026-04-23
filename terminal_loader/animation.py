@@ -51,6 +51,22 @@ class SnakeAnimation:
         if len(self.body) > self.max_length:
             self.body.pop()
 
+    def chase_target(self, target_y, target_x):
+        """Move toward target using simple Manhattan distance heuristic."""
+        head_y, head_x = self.body[0]
+
+        # Calculate Manhattan distances for each direction
+        candidates = []
+        for dy, dx in self.DIRECTIONS:
+            new_y = (head_y + dy) % self.height
+            new_x = (head_x + dx) % self.width
+            dist = abs(new_y - target_y) + abs(new_x - target_x)
+            candidates.append((dist, (dy, dx)))
+
+        # Pick direction that reduces distance most
+        candidates.sort()
+        self.next_direction = candidates[0][1]
+
     def random_direction(self):
         """Pick a new random direction, avoiding immediate reversal."""
         opposite = (-self.direction[0], -self.direction[1])
@@ -77,3 +93,4 @@ class SnakeAnimation:
         self.frame_count = 0
         self.max_length = self.initial_length
         self._initialize_snake()
+
