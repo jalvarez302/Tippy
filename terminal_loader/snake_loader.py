@@ -30,8 +30,14 @@ class SnakeLoader:
         height, width = self.renderer.get_dimensions()
         self.play_height = max(1, height - 3)
         self.play_width = max(1, width - 2)
+        # Longest word is 13 letters; the snake must stay comfortably
+        # shorter than the play area or it degenerates into a solid bar.
+        self.length_cap = max(8, min(20, self.play_width // 3))
         self.snake = SnakeAnimation(
-            self.play_height, self.play_width, initial_length=5
+            self.play_height,
+            self.play_width,
+            initial_length=5,
+            length_cap=self.length_cap,
         )
         self.word_index = 0
         self.frame_count = 0
@@ -58,6 +64,8 @@ class SnakeLoader:
         self.word_letters.clear()
         self.letters_eaten = 0
         self.current_target = None
+        # Each word is a fresh run: without this the snake only ever grows.
+        self.snake.reset_length()
 
         height, width = self.renderer.get_dimensions()
         center_y = height // 2
@@ -138,19 +146,15 @@ class SnakeLoader:
 
         self.renderer.draw_border(color_pair=2)
 
-        for i, (y, x) in enumerate(self.snake.get_body()):
-            screen_y = y + 1
-            screen_x = x + 1
-            if i == 0:
-                self.renderer.draw_char(screen_y, screen_x, "●", color_pair=1)
-            else:
-                self.renderer.draw_char(screen_y, screen_x, "○", color_pair=1)
-
+        # Letters first: the snake draws over them, so the head stays visible
+        # while it is sitting on the letter it is eating.
         for (y, x), (letter, eaten) in self.word_letters.items():
-            screen_y = y + 1
-            screen_x = x + 1
             if not eaten:
-                self.renderer.draw_char(screen_y, screen_x, letter, color_pair=3)
+                self.renderer.draw_char(y + 1, x + 1, letter, color_pair=3)
+
+        for i, (y, x) in enumerate(self.snake.get_body()):
+            char = "●" if i == 0 else "○"
+            self.renderer.draw_char(y + 1, x + 1, char, color_pair=1)
 
         current_word = self._get_current_word()
         progress = f"{self.letters_eaten}/{len(current_word)}"

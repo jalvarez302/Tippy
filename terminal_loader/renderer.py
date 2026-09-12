@@ -31,6 +31,14 @@ class TerminalRenderer:
 
         self.stdscr.nodelay(True)
         self.stdscr.timeout(0)
+        try:
+            self.stdscr.keypad(True)
+        except curses.error:
+            pass
+        try:
+            curses.curs_set(0)
+        except curses.error:
+            pass
 
         self.height, self.width = self.stdscr.getmaxyx()
 
@@ -41,12 +49,19 @@ class TerminalRenderer:
                 curses.init_pair(1, curses.COLOR_GREEN, -1)
                 curses.init_pair(2, curses.COLOR_CYAN, -1)
                 curses.init_pair(3, curses.COLOR_YELLOW, -1)
+                curses.init_pair(4, curses.COLOR_RED, -1)
+                curses.init_pair(5, curses.COLOR_MAGENTA, -1)
+                curses.init_pair(6, curses.COLOR_WHITE, -1)
         except curses.error:
             pass
 
     def _cleanup(self):
         """Restore terminal to normal state."""
         if self.stdscr:
+            try:
+                curses.curs_set(1)
+            except curses.error:
+                pass
             try:
                 curses.echo()
             except curses.error:
@@ -115,6 +130,39 @@ class TerminalRenderer:
 
         x = max(0, (self.width - len(text)) // 2)
         self.draw_string(y, x, text, color_pair=2)
+
+    def get_key(self):
+        """Return the next queued key, or None if nothing is waiting.
+
+        Never blocks: the screen is in nodelay mode, so curses returns -1 when
+        the input queue is empty.
+        """
+        try:
+            key = self.stdscr.getch()
+        except curses.error:
+            return None
+        return None if key == -1 else key
+
+    def drain_keys(self, limit=16):
+        """Return every key currently queued, oldest first.
+
+        A slow frame can let several presses pile up; reading them all keeps the
+        snake from replaying stale input for seconds after the player stopped.
+        """
+        keys = []
+        for _ in range(limit):
+            key = self.get_key()
+            if key is None:
+                break
+            keys.append(key)
+        return keys
+
+    def flush_input(self):
+        """Discard anything sitting in the input queue."""
+        try:
+            curses.flushinp()
+        except curses.error:
+            pass
 
     def get_dimensions(self):
         """Return terminal dimensions (height, width)."""
