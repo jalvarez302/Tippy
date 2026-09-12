@@ -16,7 +16,6 @@ import signal
 import subprocess
 import threading
 import time
-from collections import deque
 
 from .animation import SnakeAnimation
 from .renderer import TerminalRenderer
@@ -94,7 +93,6 @@ class ThinkingSnake:
     """The playable loading screen."""
 
     HEAD_CHAR = "●"
-    BODY_CHAR = "○"
 
     BASE_FPS = 9
     MAX_FPS = 18
@@ -154,33 +152,36 @@ class ThinkingSnake:
             pass
 
     def _new_snake(self):
+        # Length 1: the snake starts as a bare seed and every segment it gains
+        # after that is a letter, so the body is never padded with filler.
         self.snake = SnakeAnimation(
             max(1, self.play_height),
             max(1, self.play_width),
-            initial_length=4,
+            initial_length=1,
             wrap=self.wrap,
         )
-        # One entry per body segment, holding the letter that segment swallowed
-        # (None for the segments the snake started with).
-        self.seg_chars = deque([None] * len(self.snake.get_body()))
+        # Letters swallowed so far, most recent first, so index i lines up with
+        # body segment i. The head is always the letter eaten last.
+        self.eaten_letters = []
+        self.finishing = False
 
     @property
     def word(self):
         return self.words[self.word_index % len(self.words)]
 
     def _load_word(self):
-        """Scatter the current word across the board, one cell per letter."""
-        word = self.word
-        self.letters = []
+        """Start the current word. Only its first letter goes on the board."""
         self.letter_index = 0
-        taken = []
+        self.finishing = False
+        self._place_letter()
 
-        for char in word:
-            spot = self._free_cell(taken)
-            if spot is None:
-                break
-            taken.append(spot)
-            self.letters.append([spot, char])
+    def _place_letter(self):
+        """Put the next letter somewhere free. One letter is on screen at a time."""
+        if self.letter_index >= len(self.word):
+            self.letter = None
+            return
+        spot = self._free_cell([])
+        self.letter = None if spot is None else [spot, self.word[self.letter_index]]
 
     def _free_cell(self, taken):
         """Find an empty cell that is not crowding the snake or another letter."""
@@ -204,10 +205,8 @@ class ThinkingSnake:
 
     @property
     def target(self):
-        """The letter that must be eaten next, or None when the word is done."""
-        if self.letter_index < len(self.letters):
-            return self.letters[self.letter_index]
-        return None
+        """The letter on the board, or None when the word is done."""
+        return self.letter
 
     @property
     def fps(self):
@@ -278,41 +277,45 @@ class ThinkingSnake:
             self._crash()
             return
 
-        # Mirror the body with the letters each segment is carrying. The new head
-        # segment starts blank and is filled in below if it just ate.
-        self.seg_chars.appendleft(None)
-        while len(self.seg_chars) > len(self.snake.get_body()):
-            self.seg_chars.pop()
+        # After the last letter the snake is still one segment short, because a
+        # snake grows into the cell ahead of it. Let it catch up before freezing,
+        # or the held word would be missing its tail letter.
+        if self.finishing:
+            if len(self.snake.get_body()) >= len(self.eaten_letters):
+                self._begin_hold()
+            return
 
         target = self.target
         if target and self.snake.get_head() == tuple(target[0]):
             self._eat(target[1])
 
     def _eat(self, char):
-        """Swallow a letter: the snake grows and that segment becomes the letter."""
-        self.snake.grow()
-        self.seg_chars[0] = char
+        """Swallow a letter. The body is exactly the letters eaten so far."""
+        self.eaten_letters.insert(0, char)
+        self.snake.max_length = max(1, len(self.eaten_letters))
         self.letter_index += 1
         self.letters_eaten += 1
 
-        if self.letter_index >= len(self.letters):
-            self._finish_word()
+        if self.letter_index >= len(self.word):
+            # Clear the board: otherwise the letter just eaten stays drawn
+            # through the finishing step and the whole hold.
+            self.letter = None
+            self.finishing = True
+        else:
+            self._place_letter()
 
-    def _finish_word(self):
+    def _begin_hold(self):
         """Word complete. Freeze so the spelled-out snake can be read."""
         self.words_done += 1
-        self.celebrate_frames = max(8, int(self.fps * 1.4))
+        self.finishing = False
+        self.celebrate_frames = max(8, int(self.fps * 1.6))
 
     def _next_word(self):
-        """Digest the finished word and scatter the next one."""
+        """Digest the finished word and start the next one."""
         self.word_index += 1
+        self.eaten_letters = []
         self.snake.reset_length()
-        self._new_snake_chars()
         self._load_word()
-
-    def _new_snake_chars(self):
-        """Clear swallowed letters without disturbing the snake's position."""
-        self.seg_chars = deque([None] * len(self.snake.get_body()))
 
     def _crash(self):
         """A crash costs the current word, not the session. The screen plays on."""
@@ -374,30 +377,25 @@ class ThinkingSnake:
             r.draw_string(1, right_x, state, color_pair=colour)
 
     def _render_letters(self, r):
-        """Uneaten letters. The next one is bright; the rest stay out of the way."""
-        for i in range(self.letter_index, len(self.letters)):
-            (y, x), char = self.letters[i]
-            if i == self.letter_index:
-                r.draw_char(y + 2, x + 1, char, C_FOOD, curses.A_BOLD)
-            else:
-                r.draw_char(y + 2, x + 1, char, C_FRAME, curses.A_DIM)
+        """The single letter currently on offer."""
+        if not self.letter:
+            return
+        (y, x), char = self.letter
+        r.draw_char(y + 2, x + 1, char, C_FOOD, curses.A_BOLD)
 
     def _render_snake(self, r):
-        """Head first, then the swallowed letters trailing behind it."""
+        """The snake is the word. Segment i carries the i-th most recent letter.
+
+        Only an unfed snake draws a marker, and only because a single letter has
+        to start somewhere.
+        """
         body = self.snake.get_body()
         for i, (y, x) in enumerate(body):
-            if i == 0:
-                held = self.seg_chars[0] if self.seg_chars else None
-                if self.celebrate_frames > 0 and held:
-                    r.draw_char(y + 2, x + 1, held, C_ACCENT, curses.A_BOLD)
-                else:
-                    r.draw_char(y + 2, x + 1, self.HEAD_CHAR, C_SNAKE, curses.A_BOLD)
-                continue
-            char = self.seg_chars[i] if i < len(self.seg_chars) else None
-            if char:
-                r.draw_char(y + 2, x + 1, char, C_SNAKE, curses.A_BOLD)
+            if i < len(self.eaten_letters):
+                colour = C_ACCENT if i == 0 else C_SNAKE
+                r.draw_char(y + 2, x + 1, self.eaten_letters[i], colour, curses.A_BOLD)
             else:
-                r.draw_char(y + 2, x + 1, self.BODY_CHAR, C_SNAKE)
+                r.draw_char(y + 2, x + 1, self.HEAD_CHAR, C_SNAKE, curses.A_BOLD)
 
     def _render_status(self, r, height, width):
         y = height - 2

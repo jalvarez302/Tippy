@@ -58,13 +58,16 @@ python3 think_snake.py --seconds 60      # timed round
 python3 think_snake.py -- npm test       # play while a real command runs
 ```
 
-The status word is scattered across the board one letter at a time, and you eat
-them in order. Every letter you swallow becomes a segment of your snake, so the
-body spells out the word you just chewed through:
+One letter of the status word appears at a time, in order. Every letter you
+swallow becomes your snake, so the body is the word itself rather than a chain
+of circles:
 
 ```
-○○○Ruminating
+Ruminating
 ```
+
+You start as a single marker and grow into the word. Finish it and the snake
+holds still for a beat so you can read what you spelled.
 
 The command runs on a background thread. When it finishes, the screen says so
 and waits for you to quit, then prints its output and exit code. See

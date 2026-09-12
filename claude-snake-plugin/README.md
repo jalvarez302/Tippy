@@ -1,16 +1,17 @@
 # snake-thinking
 
 Play snake while you wait, against the words Claude Code shows when it is
-thinking. The current status word is scattered across the board one letter at a
-time. You eat them in order, and each letter you swallow becomes a segment of
-your snake, so the body gradually spells out the word.
+thinking. One letter of the current status word is on the board at a time, and
+they come in order. Each letter you swallow becomes your snake, so the body is
+the word rather than a chain of circles:
 
 ```
-○○○Ruminating
+Ruminating
 ```
 
-Finish a word and the snake freezes for a beat so you can read it, then digests
-and the next word scatters.
+You start as a single marker and grow into the word, letter by letter. Finish it
+and the snake holds still for a beat so you can read what you spelled, then it
+resets to a marker and the next word begins.
 
 ## Run it
 
