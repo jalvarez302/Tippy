@@ -97,9 +97,9 @@ class ThinkingSnake:
     # Movement is measured in cells per second, separately from the redraw
     # rate. Tying the two together meant input was only sampled once per move,
     # so at a playable pace the controls felt a beat behind.
-    BASE_SPEED = 4.5
-    MAX_SPEED = 8.0
-    SPEED_STEP = 0.4
+    BASE_SPEED = 6.5
+    MAX_SPEED = 11.0
+    SPEED_STEP = 0.5
     LETTERS_PER_SPEEDUP = 8
 
     FRAME_RATE = 60

@@ -33,9 +33,9 @@ class SnakeGame:
 
     # Movement is cells per second, kept separate from the redraw rate so input
     # is sampled every frame rather than once per move.
-    BASE_SPEED = 5.5
-    MAX_SPEED = 10.0
-    SPEED_STEP = 0.55
+    BASE_SPEED = 7.5
+    MAX_SPEED = 13.0
+    SPEED_STEP = 0.7
     FOOD_PER_SPEEDUP = 4
     POINTS_PER_FOOD = 10
 

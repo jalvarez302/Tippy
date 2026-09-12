@@ -21,7 +21,7 @@ def main():
         dest="speed",
         type=float,
         default=None,
-        help="Starting speed in cells per second; rises as you eat (default: 5.5)",
+        help="Starting speed in cells per second; rises as you eat (default: 7.5)",
     )
     parser.add_argument(
         "--wrap",
