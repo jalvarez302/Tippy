@@ -66,8 +66,10 @@ of circles:
 Ruminating
 ```
 
-You start as a single marker and grow into the word. Finish it and the snake
-holds still for a beat so you can read what you spelled.
+You start as a single marker and grow into the word. The head carries the first
+letter you ate and each new letter is added behind it, so the word reads in
+order when you are travelling left. Finish it and the snake holds still for a
+beat so you can read what you spelled.
 
 The command runs on a background thread. When it finishes, the screen says so
 and waits for you to quit, then prints its output and exit code. See

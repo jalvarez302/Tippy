@@ -160,8 +160,9 @@ class ThinkingSnake:
             initial_length=1,
             wrap=self.wrap,
         )
-        # Letters swallowed so far, most recent first, so index i lines up with
-        # body segment i. The head is always the letter eaten last.
+        # Letters swallowed so far, oldest first, so index i lines up with body
+        # segment i. The head carries the first letter eaten and each new letter
+        # is added behind it, so the word builds backward from the head.
         self.eaten_letters = []
         self.finishing = False
 
@@ -291,7 +292,7 @@ class ThinkingSnake:
 
     def _eat(self, char):
         """Swallow a letter. The body is exactly the letters eaten so far."""
-        self.eaten_letters.insert(0, char)
+        self.eaten_letters.append(char)
         self.snake.max_length = max(1, len(self.eaten_letters))
         self.letter_index += 1
         self.letters_eaten += 1
@@ -384,10 +385,11 @@ class ThinkingSnake:
         r.draw_char(y + 2, x + 1, char, C_FOOD, curses.A_BOLD)
 
     def _render_snake(self, r):
-        """The snake is the word. Segment i carries the i-th most recent letter.
+        """The snake is the word. Segment i carries the i-th letter eaten.
 
-        Only an unfed snake draws a marker, and only because a single letter has
-        to start somewhere.
+        The head leads with the first letter and the word trails behind it, so it
+        reads in order when the snake is travelling left. Only an unfed snake
+        draws a marker, and only because a single letter has to start somewhere.
         """
         body = self.snake.get_body()
         for i, (y, x) in enumerate(body):

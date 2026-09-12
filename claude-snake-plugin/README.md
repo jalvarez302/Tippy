@@ -9,9 +9,11 @@ the word rather than a chain of circles:
 Ruminating
 ```
 
-You start as a single marker and grow into the word, letter by letter. Finish it
-and the snake holds still for a beat so you can read what you spelled, then it
-resets to a marker and the next word begins.
+You start as a single marker and grow into the word, letter by letter. The head
+carries the first letter you ate and each new letter is added behind it, so the
+word builds backward from the head and reads in order when you are travelling
+left. Finish it and the snake holds still for a beat so you can read what you
+spelled, then it resets to a marker and the next word begins.
 
 ## Run it
 
