@@ -48,8 +48,8 @@ python3 play_snake.py
 Arrows or WASD steer, `p` pauses, `r` restarts after a crash, `q` quits. You
 start at four segments and gain one per pellet. Walls and your own body are
 fatal, and the speed steps up every four pellets until it plateaus. Pass
-`--wrap` to pass through the walls instead of dying on them, or `--fps N` to set
-the starting speed.
+`--wrap` to pass through the walls instead of dying on them, or `--speed N` to
+set the starting pace in cells per second.
 
 **Play it while something slow runs**
 

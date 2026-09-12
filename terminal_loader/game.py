@@ -31,10 +31,17 @@ class SnakeGame:
     BODY_CHAR = "○"
     FOOD_CHAR = "◆"
 
-    BASE_FPS = 10
-    MAX_FPS = 22
+    # Movement is cells per second, kept separate from the redraw rate so input
+    # is sampled every frame rather than once per move.
+    BASE_SPEED = 5.5
+    MAX_SPEED = 10.0
+    SPEED_STEP = 0.55
     FOOD_PER_SPEEDUP = 4
     POINTS_PER_FOOD = 10
+
+    FRAME_RATE = 60
+    MAX_CATCHUP_STEPS = 3
+    MAX_QUEUED_TURNS = 3
 
     # Every accepted steering key, mapped to a (dy, dx) heading.
     KEY_DIRECTIONS = {
@@ -59,7 +66,7 @@ class SnakeGame:
     def __init__(self, fps=None, wrap=False):
         self.renderer = TerminalRenderer()
         self.wrap = wrap
-        self.base_fps = fps or self.BASE_FPS
+        self.base_speed = fps or self.BASE_SPEED
 
         height, width = self.renderer.get_dimensions()
         # Rows: top border, HUD, play area, status line, bottom border.
@@ -91,6 +98,7 @@ class SnakeGame:
         )
         self.score = 0
         self.food_eaten = 0
+        self.turn_queue = []
         self.paused = False
         self.game_over = False
         self.death_reason = None
@@ -108,10 +116,14 @@ class SnakeGame:
         self.food = random.choice(free) if free else None
 
     @property
-    def fps(self):
-        """Speed ramps with every few pellets, then plateaus."""
+    def speed(self):
+        """Cells per second. Ramps with every few pellets, then plateaus."""
         step = self.food_eaten // self.FOOD_PER_SPEEDUP
-        return min(self.MAX_FPS, self.base_fps + step)
+        return min(self.MAX_SPEED, self.base_speed + step * self.SPEED_STEP)
+
+    @property
+    def step_interval(self):
+        return 1.0 / self.speed
 
     @property
     def speed_level(self):
@@ -127,15 +139,37 @@ class SnakeGame:
             return 0
 
         self.running = True
+        frame = 1.0 / self.FRAME_RATE
+        carried = 0.0
+        last = time.monotonic()
         try:
             while self.running:
+                now = time.monotonic()
+                delta = now - last
+                last = now
+
                 self._handle_input()
                 if not self.running:
                     break
-                if not self.paused and not self.game_over:
-                    self._step()
+
+                if self.paused or self.game_over:
+                    carried = 0.0
+                else:
+                    carried += delta
+                    steps = 0
+                    while (carried >= self.step_interval
+                           and steps < self.MAX_CATCHUP_STEPS):
+                        carried -= self.step_interval
+                        self._step()
+                        steps += 1
+                        if self.game_over:
+                            carried = 0.0
+                            break
+                    if steps >= self.MAX_CATCHUP_STEPS:
+                        carried = 0.0
+
                 self._render()
-                time.sleep(1 / self.fps)
+                time.sleep(max(0.0, frame - (time.monotonic() - now)))
         except KeyboardInterrupt:
             pass
         finally:
@@ -165,14 +199,21 @@ class SnakeGame:
                 self.paused = not self.paused
                 continue
             direction = self.KEY_DIRECTIONS.get(key)
-            if direction and self.snake.set_direction(direction):
-                # One accepted turn per frame; the rest stay queued for the next
-                # step so a fast diagonal flick cannot skip a cell.
+            if direction:
                 self.paused = False
-                break
+                if len(self.turn_queue) < self.MAX_QUEUED_TURNS:
+                    self.turn_queue.append(direction)
+
+    def _apply_queued_turn(self):
+        """Take the next buffered turn the snake can legally make."""
+        while self.turn_queue:
+            direction = self.turn_queue.pop(0)
+            if self.snake.set_direction(direction):
+                return
 
     def _step(self):
         """Advance one tick of play."""
+        self._apply_queued_turn()
         alive = self.snake.update()
         if not alive:
             self.game_over = True

@@ -90,23 +90,36 @@ class TerminalRenderer:
 
         attr takes curses attributes such as curses.A_BOLD or curses.A_DIM.
         """
-        if 0 <= y < self.height and 0 <= x < self.width - 1:
-            try:
+        if not (0 <= y < self.height and 0 <= x < self.width):
+            return
+        try:
+            if y == self.height - 1 and x == self.width - 1:
+                # Writing the bottom-right cell with addstr advances the cursor
+                # off the screen and curses raises. insstr places the character
+                # without moving the cursor. insch would be the obvious call but
+                # it only takes a single byte, so a box-drawing character
+                # overflows chtype and raises OverflowError instead.
+                self.stdscr.insstr(y, x, char, curses.color_pair(color_pair) | attr)
+            else:
                 self.stdscr.addstr(y, x, char, curses.color_pair(color_pair) | attr)
-            except curses.error:
-                pass
+        except (curses.error, OverflowError, ValueError):
+            pass
 
     def draw_string(self, y, x, text, color_pair=0, attr=0):
         """Draw a string starting at position (y, x)."""
         if 0 <= y < self.height and 0 <= x < self.width:
             try:
-                max_len = self.width - x - 1
+                # The whole width is usable except the very last cell of the
+                # last row, which cannot be written without scrolling.
+                max_len = self.width - x
+                if y == self.height - 1:
+                    max_len -= 1
                 truncated = text[:max_len] if max_len > 0 else ""
                 if truncated:
                     self.stdscr.addstr(
                         y, x, truncated, curses.color_pair(color_pair) | attr
                     )
-            except curses.error:
+            except (curses.error, OverflowError, ValueError):
                 pass
 
     def draw_border(self, color_pair=0):

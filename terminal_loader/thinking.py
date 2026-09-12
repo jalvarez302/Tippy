@@ -94,9 +94,21 @@ class ThinkingSnake:
 
     HEAD_CHAR = "●"
 
-    BASE_FPS = 9
-    MAX_FPS = 18
-    LETTERS_PER_SPEEDUP = 6
+    # Movement is measured in cells per second, separately from the redraw
+    # rate. Tying the two together meant input was only sampled once per move,
+    # so at a playable pace the controls felt a beat behind.
+    BASE_SPEED = 4.5
+    MAX_SPEED = 8.0
+    SPEED_STEP = 0.4
+    LETTERS_PER_SPEEDUP = 8
+
+    FRAME_RATE = 60
+    HOLD_SECONDS = 1.3
+    # Cap catch-up so a stalled process cannot teleport the snake across the board.
+    MAX_CATCHUP_STEPS = 3
+    # Turns buffered while waiting for the next move, so a quick double tap round
+    # a corner is not swallowed.
+    MAX_QUEUED_TURNS = 3
 
     KEY_DIRECTIONS = {
         curses.KEY_UP: (-1, 0), curses.KEY_DOWN: (1, 0),
@@ -118,7 +130,7 @@ class ThinkingSnake:
         self.words = list(words or THINKING_WORDS)
         random.shuffle(self.words)
         self.wrap = wrap
-        self.base_fps = fps or self.BASE_FPS
+        self.base_speed = fps or self.BASE_SPEED
 
         self.renderer = TerminalRenderer()
         height, width = self.renderer.get_dimensions()
@@ -134,10 +146,11 @@ class ThinkingSnake:
         self.paused = False
         self.running = False
         self.finished_at = None
-        # Frames left holding a completed word on screen. Without this the
+        # Deadline for holding a completed word on screen. Without this the
         # snake spells the word and erases it in the same frame, so the whole
         # payoff of the mechanic is invisible.
-        self.celebrate_frames = 0
+        self.hold_until = 0.0
+        self.turn_queue = []
 
         self._install_signal_handler()
         self._new_snake()
@@ -165,6 +178,7 @@ class ThinkingSnake:
         # is added behind it, so the word builds backward from the head.
         self.eaten_letters = []
         self.finishing = False
+        self.turn_queue = []
 
     @property
     def word(self):
@@ -210,9 +224,19 @@ class ThinkingSnake:
         return self.letter
 
     @property
-    def fps(self):
+    def speed(self):
+        """Cells per second, ramping gently as the round goes on."""
         step = self.letters_eaten // self.LETTERS_PER_SPEEDUP
-        return min(self.MAX_FPS, self.base_fps + step)
+        return min(self.MAX_SPEED, self.base_speed + step * self.SPEED_STEP)
+
+    @property
+    def step_interval(self):
+        return 1.0 / self.speed
+
+    @property
+    def holding(self):
+        """True while a finished word is frozen on screen."""
+        return self.hold_until > 0.0
 
     @property
     def eaten_text(self):
@@ -228,17 +252,47 @@ class ThinkingSnake:
             return self._summary()
 
         self.running = True
+        frame = 1.0 / self.FRAME_RATE
+        carried = 0.0
+        last = time.monotonic()
         try:
             while self.running:
+                now = time.monotonic()
+                delta = now - last
+                last = now
+
+                # Input and redraw happen every frame; the snake moves on its
+                # own slower clock. That is what makes the controls feel
+                # immediate while the motion itself stays calm.
                 self._handle_input()
                 if not self.running:
                     break
                 if self.worker.done.is_set() and self.finished_at is None:
-                    self.finished_at = time.time()
-                if not self.paused:
-                    self._step()
+                    self.finished_at = now
+
+                if self.holding:
+                    if now >= self.hold_until:
+                        self.hold_until = 0.0
+                        self._next_word()
+                    carried = 0.0
+                elif self.paused:
+                    carried = 0.0
+                else:
+                    carried += delta
+                    steps = 0
+                    while (carried >= self.step_interval
+                           and steps < self.MAX_CATCHUP_STEPS):
+                        carried -= self.step_interval
+                        self._step()
+                        steps += 1
+                        if self.holding or not self.running:
+                            carried = 0.0
+                            break
+                    if steps >= self.MAX_CATCHUP_STEPS:
+                        carried = 0.0
+
                 self._render()
-                time.sleep(1 / self.fps)
+                time.sleep(max(0.0, frame - (time.monotonic() - now)))
         except KeyboardInterrupt:
             pass
         finally:
@@ -262,17 +316,20 @@ class ThinkingSnake:
                 self.paused = not self.paused
                 continue
             direction = self.KEY_DIRECTIONS.get(key)
-            if direction and self.snake.set_direction(direction):
+            if direction:
                 self.paused = False
-                break
+                if len(self.turn_queue) < self.MAX_QUEUED_TURNS:
+                    self.turn_queue.append(direction)
+
+    def _apply_queued_turn(self):
+        """Take the next buffered turn the snake can legally make."""
+        while self.turn_queue:
+            direction = self.turn_queue.pop(0)
+            if self.snake.set_direction(direction):
+                return
 
     def _step(self):
-        if self.celebrate_frames > 0:
-            self.celebrate_frames -= 1
-            if self.celebrate_frames == 0:
-                self._next_word()
-            return
-
+        self._apply_queued_turn()
         alive = self.snake.update()
         if not alive:
             self._crash()
@@ -309,7 +366,7 @@ class ThinkingSnake:
         """Word complete. Freeze so the spelled-out snake can be read."""
         self.words_done += 1
         self.finishing = False
-        self.celebrate_frames = max(8, int(self.fps * 1.6))
+        self.hold_until = time.monotonic() + self.HOLD_SECONDS
 
     def _next_word(self):
         """Digest the finished word and start the next one."""
@@ -321,7 +378,8 @@ class ThinkingSnake:
     def _crash(self):
         """A crash costs the current word, not the session. The screen plays on."""
         self.crashes += 1
-        self.celebrate_frames = 0
+        self.hold_until = 0.0
+        self.turn_queue = []
         self._new_snake()
         self._load_word()
 
@@ -406,7 +464,7 @@ class ThinkingSnake:
             verb = "finished" if ok else "failed (exit %s)" % self.worker.returncode
             r.center_text("Claude %s  —  q to come back" % verb, y=y)
             return
-        if self.celebrate_frames > 0:
+        if self.holding:
             r.center_text("%s  ✓" % self.word, y=y)
             return
         if self.paused:

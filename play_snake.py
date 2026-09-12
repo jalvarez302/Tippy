@@ -16,10 +16,12 @@ from terminal_loader import SnakeGame
 def main():
     parser = argparse.ArgumentParser(description="Playable terminal snake game")
     parser.add_argument(
+        "--speed",
         "--fps",
-        type=int,
-        default=10,
-        help="Starting speed in frames per second; rises as you eat (default: 10)",
+        dest="speed",
+        type=float,
+        default=None,
+        help="Starting speed in cells per second; rises as you eat (default: 5.5)",
     )
     parser.add_argument(
         "--wrap",
@@ -45,7 +47,7 @@ def main():
         return 1
 
     try:
-        best = SnakeGame(fps=args.fps, wrap=args.wrap).start()
+        best = SnakeGame(fps=args.speed, wrap=args.wrap).start()
     except Exception as exc:
         print("Error: %s" % exc, file=sys.stderr)
         return 1

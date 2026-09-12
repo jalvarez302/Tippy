@@ -41,7 +41,14 @@ def main(argv=None):
         default=None,
         help="With no command, how long to pretend to think (default: 20)",
     )
-    parser.add_argument("--fps", type=int, default=None, help="Starting speed")
+    parser.add_argument(
+        "--speed",
+        "--fps",
+        dest="speed",
+        type=float,
+        default=None,
+        help="Starting speed in cells per second; rises as you eat (default: 4.5)",
+    )
     parser.add_argument(
         "--wrap", action="store_true", help="Pass through walls instead of crashing"
     )
@@ -61,7 +68,7 @@ def main(argv=None):
         return 1
 
     result = think(
-        command=command, seconds=args.seconds, fps=args.fps, wrap=args.wrap
+        command=command, seconds=args.seconds, fps=args.speed, wrap=args.wrap
     )
 
     print(
