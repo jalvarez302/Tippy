@@ -51,6 +51,25 @@ fatal, and the speed steps up every four pellets until it plateaus. Pass
 `--wrap` to pass through the walls instead of dying on them, or `--fps N` to set
 the starting speed.
 
+**Play it while something slow runs**
+
+```
+python3 think_snake.py --seconds 60      # timed round
+python3 think_snake.py -- npm test       # play while a real command runs
+```
+
+The status word is scattered across the board one letter at a time, and you eat
+them in order. Every letter you swallow becomes a segment of your snake, so the
+body spells out the word you just chewed through:
+
+```
+○○○Ruminating
+```
+
+The command runs on a background thread. When it finishes, the screen says so
+and waits for you to quit, then prints its output and exit code. See
+`claude-snake-plugin/` for the plugin shaped around this.
+
 **Watch it**
 
 ```

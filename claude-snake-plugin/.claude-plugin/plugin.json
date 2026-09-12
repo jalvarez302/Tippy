@@ -1,0 +1,9 @@
+{
+  "name": "snake-thinking",
+  "description": "Play snake against Claude's thinking words while a long task runs. Every letter you eat becomes part of your snake, so the body spells out the word.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Jose Alvarez Avina"
+  },
+  "keywords": ["snake", "game", "terminal", "loading", "curses", "waiting"]
+}

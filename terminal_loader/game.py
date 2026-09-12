@@ -50,7 +50,9 @@ class SnakeGame:
         ord("h"): (0, -1), ord("l"): (0, 1),
     }
 
-    QUIT_KEYS = {ord("q"), ord("Q"), 27}
+    # Deliberately not ESC: arrow keys arrive as an escape sequence, and a
+    # stray ESC would quit mid-game.
+    QUIT_KEYS = {ord("q"), ord("Q")}
     PAUSE_KEYS = {ord("p"), ord("P"), ord(" ")}
     RESTART_KEYS = {ord("r"), ord("R")}
 

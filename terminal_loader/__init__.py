@@ -1,7 +1,17 @@
-"""Terminal loader utilities: an autonomous snake loading animation and a playable snake game."""
+"""Terminal snake: a loading animation, a game, and a playable thinking screen."""
 
 from .snake_loader import SnakeLoader
 from .game import SnakeGame, play
+from .thinking import ThinkingSnake, Worker, think
+from .words import THINKING_WORDS
 
-__all__ = ["SnakeLoader", "SnakeGame", "play"]
-__version__ = "0.2.0"
+__all__ = [
+    "SnakeLoader",
+    "SnakeGame",
+    "play",
+    "ThinkingSnake",
+    "Worker",
+    "think",
+    "THINKING_WORDS",
+]
+__version__ = "0.3.0"

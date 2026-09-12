@@ -14,6 +14,8 @@ class TerminalRenderer:
         self.stdscr = None
         self.height = 0
         self.width = 0
+        self._raw_keys = []
+        self._esc_frames = 0
         self._init_curses()
         atexit.register(self._cleanup)
 
@@ -83,28 +85,27 @@ class TerminalRenderer:
         """Refresh the display."""
         self.stdscr.refresh()
 
-    def draw_char(self, y, x, char, color_pair=0):
-        """Draw a single character at position (y, x). Supports Unicode."""
+    def draw_char(self, y, x, char, color_pair=0, attr=0):
+        """Draw a single character at position (y, x). Supports Unicode.
+
+        attr takes curses attributes such as curses.A_BOLD or curses.A_DIM.
+        """
         if 0 <= y < self.height and 0 <= x < self.width - 1:
             try:
-                if color_pair > 0:
-                    self.stdscr.addstr(y, x, char, curses.color_pair(color_pair))
-                else:
-                    self.stdscr.addstr(y, x, char)
+                self.stdscr.addstr(y, x, char, curses.color_pair(color_pair) | attr)
             except curses.error:
                 pass
 
-    def draw_string(self, y, x, text, color_pair=0):
+    def draw_string(self, y, x, text, color_pair=0, attr=0):
         """Draw a string starting at position (y, x)."""
         if 0 <= y < self.height and 0 <= x < self.width:
             try:
                 max_len = self.width - x - 1
                 truncated = text[:max_len] if max_len > 0 else ""
                 if truncated:
-                    if color_pair > 0:
-                        self.stdscr.addstr(y, x, truncated, curses.color_pair(color_pair))
-                    else:
-                        self.stdscr.addstr(y, x, truncated)
+                    self.stdscr.addstr(
+                        y, x, truncated, curses.color_pair(color_pair) | attr
+                    )
             except curses.error:
                 pass
 
@@ -143,22 +144,72 @@ class TerminalRenderer:
             return None
         return None if key == -1 else key
 
-    def drain_keys(self, limit=16):
-        """Return every key currently queued, oldest first.
+    # Raw escape sequences for the arrow keys, in both normal and application
+    # cursor mode. In nodelay mode ncurses will not wait for the rest of a
+    # sequence, so it hands back ESC, then "[", then the letter, and the caller
+    # sees a bare ESC press that was never made.
+    ESC_SEQUENCES = {
+        (0x5B, 0x41): curses.KEY_UP,
+        (0x5B, 0x42): curses.KEY_DOWN,
+        (0x5B, 0x43): curses.KEY_RIGHT,
+        (0x5B, 0x44): curses.KEY_LEFT,
+        (0x4F, 0x41): curses.KEY_UP,
+        (0x4F, 0x42): curses.KEY_DOWN,
+        (0x4F, 0x43): curses.KEY_RIGHT,
+        (0x4F, 0x44): curses.KEY_LEFT,
+    }
+
+    # Frames to hold a lone ESC waiting for the rest of a sequence before
+    # deciding it really was just the escape key.
+    ESC_PATIENCE = 2
+
+    def drain_keys(self, limit=32):
+        """Return every key queued since the last call, oldest first.
 
         A slow frame can let several presses pile up; reading them all keeps the
         snake from replaying stale input for seconds after the player stopped.
+        Escape sequences are reassembled here, across frames when a sequence is
+        split over two reads.
         """
-        keys = []
         for _ in range(limit):
             key = self.get_key()
             if key is None:
                 break
-            keys.append(key)
+            self._raw_keys.append(key)
+
+        keys = []
+        while self._raw_keys:
+            key = self._raw_keys[0]
+            if key != 0x1B:
+                keys.append(key)
+                self._raw_keys.pop(0)
+                continue
+
+            pair = tuple(self._raw_keys[1:3])
+            if len(pair) == 2:
+                translated = self.ESC_SEQUENCES.get(pair)
+                del self._raw_keys[0:3]
+                self._esc_frames = 0
+                if translated is not None:
+                    keys.append(translated)
+                # An unrecognised sequence is swallowed rather than guessed at.
+                continue
+
+            # Sequence is still arriving. Wait a frame or two before calling it
+            # a real escape key press.
+            if self._esc_frames < self.ESC_PATIENCE:
+                self._esc_frames += 1
+                break
+            self._raw_keys.pop(0)
+            self._esc_frames = 0
+            keys.append(0x1B)
+
         return keys
 
     def flush_input(self):
         """Discard anything sitting in the input queue."""
+        self._raw_keys = []
+        self._esc_frames = 0
         try:
             curses.flushinp()
         except curses.error:
