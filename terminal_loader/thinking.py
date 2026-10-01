@@ -212,8 +212,8 @@ class ThinkingSnake:
     # Movement is measured in cells per second, separately from the redraw
     # rate. Tying the two together meant input was only sampled once per move,
     # so at a playable pace the controls felt a beat behind.
-    BASE_SPEED = 6.5
-    MAX_SPEED = 11.0
+    BASE_SPEED = 8.0
+    MAX_SPEED = 13.0
     SPEED_STEP = 0.5
     LETTERS_PER_SPEEDUP = 8
     # A terminal cell is about twice as tall as it is wide, so the same cells
@@ -240,6 +240,13 @@ class ThinkingSnake:
     POP_IN = "·✢✶"
     POP_IN_SECONDS = 0.21
     EAT_FLASH_SECONDS = 0.16
+
+    # Tap the same direction twice quickly to dash. Terminals report presses but
+    # not releases, so a boost runs for a fixed time; holding the key works too,
+    # because auto-repeat keeps re-tapping it.
+    DOUBLE_TAP_SECONDS = 0.25
+    BOOST_MULTIPLIER = 1.9
+    BOOST_SECONDS = 0.7
 
     KEY_DIRECTIONS = {
         curses.KEY_UP: (-1, 0), curses.KEY_DOWN: (1, 0),
@@ -289,6 +296,8 @@ class ThinkingSnake:
         self.phase_until = 0.0
         self.burst_kind = None
         self.ate_at = -1.0
+        self.boost_until = 0.0
+        self.last_tap = (None, -1.0)
 
         self._install_signal_handler()
         self._new_snake()
@@ -317,6 +326,7 @@ class ThinkingSnake:
         self.eaten_letters = []
         self.finishing = False
         self.turn_queue = []
+        self.boost_until = 0.0
 
     @property
     def word(self):
@@ -374,7 +384,12 @@ class ThinkingSnake:
         """Seconds until the next move, longer when that move is vertical."""
         heading = self.turn_queue[0] if self.turn_queue else self.snake.next_direction
         stretch = self.VERTICAL_STRETCH if heading[0] else 1.0
-        return stretch / self.speed
+        boost = self.BOOST_MULTIPLIER if self.boosting else 1.0
+        return stretch / (self.speed * boost)
+
+    @property
+    def boosting(self):
+        return self.now < self.boost_until
 
     @property
     def holding(self):
@@ -463,8 +478,27 @@ class ThinkingSnake:
             direction = self.KEY_DIRECTIONS.get(key)
             if direction:
                 self.paused = False
-                if len(self.turn_queue) < self.MAX_QUEUED_TURNS:
+                self._check_double_tap(direction)
+                # The second tap of a dash is not a second turn.
+                queued = self.turn_queue[-1] if self.turn_queue else None
+                if (direction != queued
+                        and len(self.turn_queue) < self.MAX_QUEUED_TURNS):
                     self.turn_queue.append(direction)
+
+    def _check_double_tap(self, direction):
+        """Start a dash when the same direction is pressed twice in quick succession."""
+        last_direction, last_at = self.last_tap
+        self.last_tap = (direction, self.now)
+        if direction != last_direction or self.now - last_at > self.DOUBLE_TAP_SECONDS:
+            return
+        if self.phase != PLAY:
+            return
+        # Never dash backwards: that turn is refused, so a boost would just
+        # fling the snake forward on a press that meant the opposite.
+        heading = self.snake.direction
+        if len(self.snake.get_body()) > 1 and direction == (-heading[0], -heading[1]):
+            return
+        self.boost_until = self.now + self.BOOST_SECONDS
 
     def _apply_queued_turn(self):
         """Take the next buffered turn the snake can legally make."""
@@ -491,10 +525,13 @@ class ThinkingSnake:
 
     def _step(self):
         self._apply_queued_turn()
+        tail = self.snake.get_body()[-1]
         alive = self.snake.update()
         if not alive:
             self._crash()
             return
+        if self.boosting:
+            self._streak(*tail)
 
         # After the last letter the snake is still one segment short, because a
         # snake grows into the cell ahead of it. Let it catch up before freezing,
@@ -601,6 +638,10 @@ class ThinkingSnake:
             self._fling(y, x, random.uniform(0, math.tau), random.uniform(4.0, 8.0),
                         random.uniform(0.2, 0.35), ["✢", "·"], "fire")
 
+    def _streak(self, y, x):
+        """A speed line left in the cell a dashing snake just vacated."""
+        self.particles.append(Particle(y, x, 0.0, 0.0, 0.3, ["·"], "fire"))
+
     def _fling(self, y, x, angle, speed, life, glyphs, ramp):
         self.particles.append(Particle(
             y, x, speed * math.sin(angle), 2.0 * speed * math.cos(angle),
@@ -692,6 +733,8 @@ class ThinkingSnake:
             state, style = "done in %.1fs" % self.worker.elapsed, "ok"
         else:
             state, style = "%ds" % self.worker.elapsed, "muted"
+        if self.boosting and self.phase == PLAY:
+            state, style = "»» %s" % state, "glow"
         right_x = width - len(state) - 2
         if right_x > x + len(word) + 3:
             self._text(1, right_x, state, style)
@@ -743,9 +786,9 @@ class ThinkingSnake:
                 style = self._level(brightness)
             elif i == 0:
                 fresh = self.now - self.ate_at < self.EAT_FLASH_SECONDS
-                style = "spark" if fresh else "glow"
+                style = "spark" if fresh or self.boosting else "glow"
             else:
-                style = "clay"
+                style = "glow" if self.boosting else "clay"
             self._put(y, x, self.eaten_letters[i], style, curses.A_BOLD)
 
     def _render_status(self, height):
@@ -765,7 +808,7 @@ class ThinkingSnake:
         tally = "%d words · %d letters" % (self.words_done, self.letters_eaten)
         if self.crashes:
             tally += " · %d crashes" % self.crashes
-        self._centre(y, "%s  ·  p pause · q quit" % tally, "muted")
+        self._centre(y, "%s  ·  double-tap to dash · p pause · q quit" % tally, "muted")
 
 
 def think(command=None, seconds=None, fps=None, wrap=False, words=None):

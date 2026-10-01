@@ -30,7 +30,8 @@ python3 think_snake.py -- pytest -q
 The command runs on a background thread. When it finishes, the screen says so
 and waits for you to quit, then prints the captured output and the exit code.
 
-Arrows or WASD steer. `p` pauses. `q` quits. Crashing into a wall or yourself
+Arrows or WASD steer. Tap a direction twice quickly to dash at nearly double
+speed for a moment, or hold it to keep dashing. `p` pauses. `q` quits. Crashing into a wall or yourself
 costs the current word and restarts it; the session keeps going, because the
 point is to pass the time rather than to lose.
 

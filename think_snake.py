@@ -39,7 +39,7 @@ def main(argv=None):
         "--seconds",
         type=float,
         default=None,
-        help="With no command, how long to pretend to think (default: 6.5)",
+        help="With no command, how long to pretend to think (default: 20)",
     )
     parser.add_argument(
         "--speed",
@@ -47,7 +47,7 @@ def main(argv=None):
         dest="speed",
         type=float,
         default=None,
-        help="Starting speed in cells per second; rises as you eat (default: 6.5)",
+        help="Starting speed in cells per second; rises as you eat (default: 8)",
     )
     parser.add_argument(
         "--wrap", action="store_true", help="Pass through walls instead of crashing"
