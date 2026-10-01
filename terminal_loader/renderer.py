@@ -78,8 +78,13 @@ class TerminalRenderer:
                 pass
 
     def clear(self):
-        """Clear the entire screen."""
-        self.stdscr.clear()
+        """Blank the screen buffer ready for the next frame.
+
+        erase rather than clear: clear also tells curses to repaint every cell
+        from scratch on the next refresh, which at 60 frames a second is a
+        visible flicker. erase lets curses send only the cells that changed.
+        """
+        self.stdscr.erase()
 
     def refresh(self):
         """Refresh the display."""

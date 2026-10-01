@@ -12,8 +12,12 @@ Ruminating
 You start as a single marker and grow into the word, letter by letter. The head
 carries the first letter you ate and each new letter is added behind it, so the
 word builds backward from the head and reads in order when you are travelling
-left. Finish it and the snake holds still for a beat so you can read what you
-spelled, then it resets to a marker and the next word begins.
+left. Finish it and the snake holds still for two seconds so you can read what
+you spelled, glints, heats up and bursts apart. The next word starts from the
+spark it leaves behind, while the explosion is still fading.
+
+It draws in Claude's colours on a 256-colour terminal and falls back to plain
+ones elsewhere. The seed you start each word as is Claude's own spinner glyph.
 
 ## Run it
 
